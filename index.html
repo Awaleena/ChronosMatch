@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChronosMatch | Zero-Copy HFT Engine</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <!-- Top Header -->
+    <header class="header">
+        <div class="header-left">
+            <div class="logo">
+                <span class="logo-icon">⚡</span>
+                <span class="logo-title">ChronosMatch</span>
+                <span class="logo-badge">ZERO-COPY HFT</span>
+            </div>
+            <div class="symbol-selector-wrap">
+                <label for="symbolSelect">Market:</label>
+                <select id="symbolSelect" class="select-box">
+                    <option value="AAPL" selected>AAPL (Apple)</option>
+                    <option value="GOOGL">GOOGL (Alphabet)</option>
+                    <option value="MSFT">MSFT (Microsoft)</option>
+                    <option value="AMZN">AMZN (Amazon)</option>
+                    <option value="TSLA">TSLA (Tesla)</option>
+                    <option value="BTC-USD">BTC-USD (Bitcoin)</option>
+                    <option value="ETH-USD">ETH-USD (Ethereum)</option>
+                    <option value="TCS">TCS (Tata Consultancy)</option>
+                    <option value="INFY">INFY (Infosys)</option>
+                    <option value="RELIANCE">RELIANCE (Reliance Ind.)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <div class="account-badge">
+                <span class="account-label">Trader:</span>
+                <select id="accountSelect" class="select-box account-select">
+                    <!-- Populated dynamically -->
+                </select>
+                <button id="btnNewAccountModal" class="btn btn-secondary btn-sm">+ New Account</button>
+            </div>
+            <div class="system-status" id="systemStatusBadge" title="Engine Connection Status">
+                <span class="status-dot"></span>
+                <span id="engineStatusText">ENGINE ONLINE</span>
+            </div>
+            <a href="/docs" target="_blank" class="docs-link" title="Open Swagger API Documentation">API Docs ↗</a>
+        </div>
+    </header>
+
+    <!-- Offline Alert Banner -->
+    <div id="offlineBanner" class="offline-banner hidden">
+        <div class="banner-content">
+            <span class="banner-icon">⚠️</span>
+            <span class="banner-text"><strong>Matching Engine Offline:</strong> Cannot reach backend server at <code id="lblBackendUrl">http://127.0.0.1:8000</code>. Please start the engine with <code>python -m uvicorn main:app --reload</code> in the backend directory, or run <code>run_demo.bat</code>.</span>
+        </div>
+        <button id="btnRetryConnection" class="btn btn-secondary btn-sm">Retry Connection</button>
+    </div>
+
+    <!-- Market Overview Ribbon -->
+    <section class="market-ribbon">
+        <div class="ribbon-item">
+            <span class="ribbon-label">SYMBOL</span>
+            <span class="ribbon-value symbol-name" id="ribbonSymbol">AAPL</span>
+        </div>
+        <div class="ribbon-item">
+            <span class="ribbon-label">LAST PRICE</span>
+            <span class="ribbon-value" id="ribbonLastPrice">--</span>
+        </div>
+        <div class="ribbon-item">
+            <span class="ribbon-label">BEST BID</span>
+            <span class="ribbon-value text-buy" id="ribbonBestBid">--</span>
+        </div>
+        <div class="ribbon-item">
+            <span class="ribbon-label">BEST ASK</span>
+            <span class="ribbon-value text-sell" id="ribbonBestAsk">--</span>
+        </div>
+        <div class="ribbon-item">
+            <span class="ribbon-label">SPREAD</span>
+            <span class="ribbon-value" id="ribbonSpread">--</span>
+        </div>
+        <div class="ribbon-item">
+            <span class="ribbon-label">TOTAL VOLUME</span>
+            <span class="ribbon-value" id="ribbonVolume">0</span>
+        </div>
+        <div class="ribbon-item">
+            <span class="ribbon-label">TRADES COUNT</span>
+            <span class="ribbon-value" id="ribbonTradesCount">0</span>
+        </div>
+    </section>
+
+    <!-- Main Workspace Grid -->
+    <main class="dashboard-grid">
+        <!-- Column 1: Order Placement & Account Management -->
+        <div class="grid-col col-order-entry">
+            <!-- Order Placement Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>ORDER PANEL</h3>
+                    <div class="order-type-switch">
+                        <button class="switch-btn active" id="btnTypeLimit" data-type="LIMIT">LIMIT</button>
+                        <button class="switch-btn" id="btnTypeMarket" data-type="MARKET">MARKET</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="side-selector">
+                        <button class="side-btn active-buy" id="btnSideBuy">BUY</button>
+                        <button class="side-btn" id="btnSideSell">SELL</button>
+                    </div>
+
+                    <form id="orderForm" class="order-form">
+                        <div class="form-group" id="groupPrice">
+                            <label for="inputPrice">Price ($)</label>
+                            <input type="number" id="inputPrice" step="0.01" min="0.01" placeholder="e.g. 150.00" class="input-box" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="inputQuantity">Quantity (Units)</label>
+                            <input type="number" id="inputQuantity" min="1" step="1" placeholder="e.g. 10" class="input-box" required>
+                        </div>
+                        <div class="order-summary-box">
+                            <div class="summary-row">
+                                <span>Estimated Total:</span>
+                                <span id="estOrderTotal" class="font-mono">$0.00</span>
+                            </div>
+                            <div class="summary-row text-muted">
+                                <span>Available Cash:</span>
+                                <span id="lblAvailableCash" class="font-mono">$0.00</span>
+                            </div>
+                            <div class="summary-row text-muted">
+                                <span>Available Shares:</span>
+                                <span id="lblAvailableShares" class="font-mono">0</span>
+                            </div>
+                        </div>
+                        <button type="submit" id="btnSubmitOrder" class="btn btn-buy btn-block">PLACE BUY ORDER</button>
+                    </form>
+                    <div id="orderAlert" class="alert-box hidden"></div>
+                </div>
+            </div>
+
+            <!-- Account Summary Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>ACCOUNT / WALLET</h3>
+                    <div class="card-actions">
+                        <button id="btnDepositModal" class="btn btn-secondary btn-xs">+ Deposit</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="wallet-stat-row">
+                        <span class="stat-name">Cash Balance:</span>
+                        <span id="accCashBalance" class="stat-value font-mono">$0.00</span>
+                    </div>
+                    <div class="wallet-stat-row">
+                        <span class="stat-name">Reserved (In Orders):</span>
+                        <span id="accReservedCash" class="stat-value text-muted font-mono">$0.00</span>
+                    </div>
+                    <div class="wallet-stat-row">
+                        <span class="stat-name">Available Cash:</span>
+                        <span id="accAvailableCash" class="stat-value text-buy font-mono">$0.00</span>
+                    </div>
+                    <div class="wallet-stat-row">
+                        <span class="stat-name">Portfolio Value:</span>
+                        <span id="accTotalPortfolio" class="stat-value font-mono font-bold">$0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 2: Order Book & Active Orders -->
+        <div class="grid-col col-orderbook">
+            <!-- Order Book Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>ORDER BOOK (<span id="obSymbolTitle">AAPL</span>)</h3>
+                    <span class="header-subtext">PRICE-TIME PRIORITY</span>
+                </div>
+                <div class="card-body no-padding">
+                    <div class="orderbook-container">
+                        <!-- Asks (Sells) Table (Upper / Descending) -->
+                        <div class="ob-table-header asks-header">
+                            <span>Price ($)</span>
+                            <span>Qty</span>
+                            <span>Orders</span>
+                        </div>
+                        <div class="ob-rows-scroll" id="obAsksList">
+                            <div class="empty-state">No active asks</div>
+                        </div>
+
+                        <!-- Mid Spread Banner -->
+                        <div class="ob-spread-bar">
+                            <span class="spread-title">SPREAD:</span>
+                            <span id="obMidSpread" class="spread-val font-mono">--</span>
+                        </div>
+
+                        <!-- Bids (Buys) Table (Lower / Descending) -->
+                        <div class="ob-table-header bids-header">
+                            <span>Price ($)</span>
+                            <span>Qty</span>
+                            <span>Orders</span>
+                        </div>
+                        <div class="ob-rows-scroll" id="obBidsList">
+                            <div class="empty-state">No active bids</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Orders Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>ACTIVE RESTING ORDERS</h3>
+                    <span class="badge" id="lblActiveOrdersCount">0</span>
+                </div>
+                <div class="card-body no-padding table-scroll-wrap">
+                    <table class="data-table" id="tableActiveOrders">
+                        <thead>
+                            <tr>
+                                <th>Order ID</th>
+                                <th>Side</th>
+                                <th>Price</th>
+                                <th>Remaining</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="activeOrdersTbody">
+                            <tr>
+                                <td colspan="5" class="empty-state">No resting orders for current trader</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Column 3: Performance Telemetry, Recent Trades & Holdings -->
+        <div class="grid-col col-telemetry">
+            <!-- Engine Performance Telemetry Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>ENGINE PERFORMANCE</h3>
+                    <span class="badge badge-perf">REAL-TIME</span>
+                </div>
+                <div class="card-body">
+                    <div class="perf-metric-grid">
+                        <div class="perf-item">
+                            <span class="perf-label">Orders Processed</span>
+                            <span class="perf-val font-mono" id="perfOrdersCount">0</span>
+                        </div>
+                        <div class="perf-item">
+                            <span class="perf-label">Throughput</span>
+                            <span class="perf-val text-buy font-mono" id="perfThroughput">0 ord/s</span>
+                        </div>
+                        <div class="perf-item">
+                            <span class="perf-label">Avg API Latency</span>
+                            <span class="perf-val font-mono" id="perfAvgLatency">-- &mu;s</span>
+                        </div>
+                        <div class="perf-item">
+                            <span class="perf-label">Match Time (Engine)</span>
+                            <span class="perf-val text-buy font-mono" id="perfMatchLatency">&lt; 15 &mu;s</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Trades Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>RECENT TRADES</h3>
+                    <span class="badge" id="lblRecentTradesCount">0</span>
+                </div>
+                <div class="card-body no-padding table-scroll-wrap trades-scroll-wrap">
+                    <table class="data-table" id="tableTrades">
+                        <thead>
+                            <tr>
+                                <th>Trade ID</th>
+                                <th>Price</th>
+                                <th>Quantity</th>
+                                <th>Time</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradesTbody">
+                            <tr>
+                                <td colspan="4" class="empty-state">No trades executed yet</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Holdings & PnL Card -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>PORTFOLIO HOLDINGS</h3>
+                </div>
+                <div class="card-body no-padding table-scroll-wrap">
+                    <table class="data-table" id="tableHoldings">
+                        <thead>
+                            <tr>
+                                <th>Symbol</th>
+                                <th>Quantity</th>
+                                <th>Avg Buy</th>
+                                <th>Market Val</th>
+                                <th>Unrealized PnL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="holdingsTbody">
+                            <tr>
+                                <td colspan="5" class="empty-state">No stock holdings</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Modal: Create Account -->
+    <div id="modalAccount" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Create Simulated Account</h3>
+                <button class="modal-close" id="btnCloseAccModal">&times;</button>
+            </div>
+            <form id="formNewAccount" class="modal-body">
+                <div class="form-group">
+                    <label for="inputNewAccountId">Account ID / Trader Name</label>
+                    <input type="text" id="inputNewAccountId" placeholder="e.g. TRADER_BOB" class="input-box" required>
+                </div>
+                <div class="form-group">
+                    <label for="inputInitialCash">Starting Simulated Cash ($)</label>
+                    <input type="number" id="inputInitialCash" value="100000" min="0" step="1000" class="input-box" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="btnCancelAccModal">Cancel</button>
+                    <button type="submit" class="btn btn-buy">Create Account</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal: Deposit Cash -->
+    <div id="modalDeposit" class="modal-overlay hidden">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3>Deposit Simulated Cash</h3>
+                <button class="modal-close" id="btnCloseDepModal">&times;</button>
+            </div>
+            <form id="formDeposit" class="modal-body">
+                <div class="form-group">
+                    <label for="inputDepositAmount">Amount ($)</label>
+                    <input type="number" id="inputDepositAmount" value="50000" min="1" step="100" class="input-box" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" id="btnCancelDepModal">Cancel</button>
+                    <button type="submit" class="btn btn-buy">Confirm Deposit</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
